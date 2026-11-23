@@ -1,6 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { HealthCheckService, MongooseHealthIndicator } from '@nestjs/terminus';
 import { HealthController } from './health.controller';
-import { HealthService } from './health.service';
+
+jest.mock('@nestjs/terminus', () => ({
+  HealthCheck: () => () => undefined,
+  HealthCheckService: class HealthCheckService {},
+  MongooseHealthIndicator: class MongooseHealthIndicator {},
+}));
 
 describe('HealthController', () => {
   let controller: HealthController;
@@ -8,7 +14,13 @@ describe('HealthController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [HealthController],
-      providers: [HealthService],
+      providers: [
+        { provide: HealthCheckService, useValue: { check: jest.fn() } },
+        {
+          provide: MongooseHealthIndicator,
+          useValue: { pingCheck: jest.fn() },
+        },
+      ],
     }).compile();
 
     controller = module.get<HealthController>(HealthController);
