@@ -13,4 +13,4 @@ async function bootstrap() {
   console.log(`BookFlow running on port ${port}`);
 }
 
-bootstrap();
+void bootstrap();
