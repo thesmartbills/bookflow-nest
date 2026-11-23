@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { LoggerModule } from 'nestjs-pino';
+import * as os from 'node:os';
 
 import configuration from './config/configuration';
 import { validationSchema } from './config/validation.schema';
@@ -46,6 +47,11 @@ import { HealthModule } from './modules/health/health.module';
       useFactory: (config: ConfigService) => ({
         uri: config.getOrThrow<string>('database.mongodbUri'),
         serverSelectionTimeoutMS: 5000,
+
+        // Workaround for MongoDB driver 7.6+ running under Jest
+        runtimeAdapters: {
+          os,
+        },
       }),
     }),
 

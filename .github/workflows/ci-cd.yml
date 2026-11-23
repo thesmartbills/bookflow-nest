@@ -15,8 +15,28 @@ permissions:
 jobs:
   test-and-build:
     name: Test and Build
-
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Temporary MongoDB instance for CI tests
+    services:
+      mongodb:
+        image: mongo:8.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 10s
+
+    # Environment variables available to every step in this job
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      LOG_LEVEL: error
+      MONGODB_URI: mongodb://127.0.0.1:27017/bookflow_test
 
     steps:
       - name: Checkout repository
@@ -43,23 +63,6 @@ jobs:
       - name: Build NestJS application
         run: npm run build
 
-    services:
-      mongodb:
-        image: mongo:8.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      NODE_ENV: test
-      PORT: 3000
-      LOG_LEVEL: error
-      MONGODB_URI: mongodb://127.0.0.1:27017/bookflow_test
-
   docker:
     name: Build and Publish Docker Image
 
@@ -68,6 +71,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     permissions:
       contents: read
