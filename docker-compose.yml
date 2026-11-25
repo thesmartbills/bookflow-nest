@@ -1,24 +1,118 @@
 services:
+  mongo-keyfile-init:
+    image: mongo:8.0
+    container_name: bookflow-keyfile-init
+    user: "0"
+    restart: "no"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        if [ ! -s /keyfile/mongodb-keyfile ]; then
+          openssl rand -base64 756 > /keyfile/mongodb-keyfile
+        fi
+        chown 999:999 /keyfile/mongodb-keyfile
+        chmod 400 /keyfile/mongodb-keyfile
+    volumes:
+      - mongo_keyfile:/keyfile
+
+  mongodb:
+    image: mongo:8.0
+    container_name: bookflow-mongodb
+    restart: unless-stopped
+    command:
+      - mongod
+      - --replSet
+      - rs0
+      - --bind_ip_all
+      - --keyFile
+      - /keyfile/mongodb-keyfile
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongo_keyfile:/keyfile:ro
+    depends_on:
+      mongo-keyfile-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mongosh --quiet --username "$$MONGO_INITDB_ROOT_USERNAME" --password "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand({ ping: 1 }).ok"'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  mongo-rs-init:
+    image: mongo:8.0
+    container_name: bookflow-rs-init
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+
+        mongosh --host mongodb:27017 \
+          --username "$$MONGO_INITDB_ROOT_USERNAME" \
+          --password "$$MONGO_INITDB_ROOT_PASSWORD" \
+          --authenticationDatabase admin \
+          --eval '
+            const hello = db.hello();
+
+            if (!hello.setName) {
+              print("Initializing replica set...");
+              rs.initiate({
+                _id: "rs0",
+                members: [
+                  { _id: 0, host: "mongodb:27017" }
+                ]
+              });
+            } else {
+              print("Replica set already initialized: " + hello.setName);
+            }
+
+            let ready = false;
+
+            for (let i = 0; i < 60; i++) {
+              if (db.hello().isWritablePrimary) {
+                ready = true;
+                break;
+              }
+              sleep(1000);
+            }
+
+            if (!ready) {
+              print("Replica set did not become PRIMARY within 60 seconds.");
+              quit(1);
+            }
+
+            print("Replica set is ready.");
+          '
+
   api:
     build:
       context: .
       dockerfile: Dockerfile
       target: production
-
     container_name: bookflow-api
-
     restart: unless-stopped
-
     ports:
-      - '3000:3000'
-
+      - "3000:3000"
     env_file:
       - .env
-
     depends_on:
-      mongodb:
-        condition: service_healthy
-
+      mongo-rs-init:
+        condition: service_completed_successfully
     healthcheck:
       test:
         - CMD
@@ -30,31 +124,6 @@ services:
       retries: 3
       start_period: 20s
 
-  mongodb:
-    image: mongo:8.0
-
-    container_name: bookflow-mongodb
-
-    restart: unless-stopped
-
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-
-    ports:
-      - '127.0.0.1:27017:27017'
-
-    volumes:
-      - mongodb_data:/data/db
-
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - 'mongosh --quiet --username "$$MONGO_INITDB_ROOT_USERNAME" --password "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand({ ping: 1 }).ok"'
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-
 volumes:
   mongodb_data:
+  mongo_keyfile:

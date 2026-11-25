@@ -10,6 +10,12 @@ import { validationSchema } from './config/validation.schema';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HealthModule } from './modules/health/health.module';
+import { TenantsModule } from './modules/tenants/tenants.module';
+import { LocationsModule } from './modules/locations/locations.module';
+import { ServicesModule } from './modules/services/services.module';
+import { StaffModule } from './modules/staff/staff.module';
+import { CustomersModule } from './modules/customers/customers.module';
+import { BookingsModule } from './modules/bookings/bookings.module';
 
 @Module({
   imports: [
@@ -56,6 +62,12 @@ import { HealthModule } from './modules/health/health.module';
     }),
 
     HealthModule,
+    TenantsModule,
+    LocationsModule,
+    ServicesModule,
+    StaffModule,
+    CustomersModule,
+    BookingsModule,
   ],
 
   controllers: [AppController],
